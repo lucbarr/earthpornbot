@@ -35,21 +35,32 @@ func defaultConfig() *Config {
 	}
 }
 
+// Reddit is used to get the reddit images
 type Reddit struct {
 	cfg       *Config
 	subreddit string
 	limit     int32
 
-	session *geddit.OAuthSession
-	client  *http.Client
+	session           *geddit.OAuthSession
+	client            *http.Client
+	allowedExtMatches []*regexp.Regexp
 }
 
 // NewReddit creates a structure to access Reddit API
 func NewReddit() *Reddit {
+
+	allowedExt := viper.GetStringSlice("subreddit.submissions.allowedExtensions")
+	allowedExtMatches := make([]*regexp.Regexp, 0, len(allowedExt))
+	for _, ext := range allowedExt {
+		pattern := fmt.Sprintf("^.+\\.%s$", ext)
+		allowedExtMatches = append(allowedExtMatches, regexp.MustCompile(pattern))
+	}
+
 	return &Reddit{
-		cfg:       defaultConfig(),
-		subreddit: viper.GetString("subreddit.name"),
-		client:    &http.Client{},
+		cfg:               defaultConfig(),
+		subreddit:         viper.GetString("subreddit.name"),
+		client:            &http.Client{},
+		allowedExtMatches: allowedExtMatches,
 	}
 }
 
@@ -145,12 +156,9 @@ func (r *Reddit) fetchSubmissions() []string {
 	}
 
 	isImageURL := func(s string) bool {
-		allowedExt := []string{"png", "jpg"}
 		ret := false
-		for _, ext := range allowedExt {
-			pattern := fmt.Sprintf("^.+\\.%s$", ext)
-			test := regexp.MustCompile(pattern)
-			ret = ret || test.MatchString(s)
+		for _, regex := range r.allowedExtMatches {
+			ret = ret || regex.MatchString(s)
 		}
 		return ret
 	}
